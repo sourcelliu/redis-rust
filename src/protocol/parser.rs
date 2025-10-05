@@ -1,7 +1,7 @@
 // RESP Protocol Parser
 
 use super::{parse_integer, read_line, RespError, RespValue, Result};
-use bytes::{Buf, BytesMut};
+use bytes::{BytesMut};
 use std::io::Cursor;
 
 pub struct RespParser;

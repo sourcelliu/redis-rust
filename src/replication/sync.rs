@@ -2,7 +2,7 @@
 
 use crate::protocol::RespValue;
 use crate::replication::backlog::ReplicationBacklog;
-use crate::storage::db::Database;
+
 use std::sync::Arc;
 
 /// Replication offset type
@@ -60,7 +60,7 @@ impl SyncHandler {
     }
 
     /// Generate PSYNC response for partial resync
-    pub fn generate_continue_response(offset: u64, repl_id: &str) -> RespValue {
+    pub fn generate_continue_response(_offset: u64, repl_id: &str) -> RespValue {
         RespValue::SimpleString(format!("CONTINUE {}", repl_id))
     }
 

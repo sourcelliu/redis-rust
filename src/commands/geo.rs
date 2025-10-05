@@ -168,7 +168,7 @@ pub async fn geoadd(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> 
         };
 
         // Validate longitude
-        if longitude < GEOHASH_LONG_MIN || longitude > GEOHASH_LONG_MAX {
+        if !(GEOHASH_LONG_MIN..=GEOHASH_LONG_MAX).contains(&longitude) {
             return RespValue::Error("ERR invalid longitude".to_string());
         }
 
@@ -182,7 +182,7 @@ pub async fn geoadd(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> 
         };
 
         // Validate latitude
-        if latitude < GEOHASH_LAT_MIN || latitude > GEOHASH_LAT_MAX {
+        if !(GEOHASH_LAT_MIN..=GEOHASH_LAT_MAX).contains(&latitude) {
             return RespValue::Error("ERR invalid latitude".to_string());
         }
 
@@ -280,10 +280,7 @@ pub async fn geodist(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) ->
     };
 
     let unit = if args.len() >= 4 {
-        match std::str::from_utf8(&args[3]) {
-            Ok(s) => s,
-            Err(_) => "m",
-        }
+        std::str::from_utf8(&args[3]).unwrap_or("m")
     } else {
         "m"
     };

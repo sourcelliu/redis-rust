@@ -1,6 +1,6 @@
 // Protocol module - RESP parser and serializer
 
-use bytes::{Buf, BytesMut};
+
 use std::io::Cursor;
 use thiserror::Error;
 

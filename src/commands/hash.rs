@@ -686,7 +686,7 @@ pub async fn hrandfield(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>)
                     use rand::seq::SliceRandom;
                     let mut rng = rand::thread_rng();
 
-                    let abs_count = n.abs() as usize;
+                    let abs_count = n.unsigned_abs() as usize;
                     let allow_duplicates = n < 0;
 
                     let mut results = Vec::new();

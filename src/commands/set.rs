@@ -310,7 +310,7 @@ pub async fn srandmember(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>
                 }
                 Some(n) => {
                     // Return multiple random members
-                    let members: Vec<_> = set.iter().take(n.abs() as usize).collect();
+                    let members: Vec<_> = set.iter().take(n.unsigned_abs() as usize).collect();
                     let result: Vec<RespValue> = members
                         .iter()
                         .map(|&m| RespValue::BulkString(Some(m.to_vec())))

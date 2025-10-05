@@ -4,6 +4,7 @@ use super::client_info::ClientRegistry;
 use super::config::ServerConfig;
 use super::connection::Connection;
 use super::slowlog::SlowLog;
+use crate::cluster::{ClusterState, MigrationManager, load_cluster_config};
 use crate::config::Config;
 use crate::persistence::aof::{AofManager, AofReader};
 use crate::persistence::rdb::RdbDeserializer;
@@ -29,6 +30,8 @@ pub struct RedisServer {
     propagator: Arc<CommandPropagator>,
     client_registry: Arc<ClientRegistry>,
     slowlog: Arc<SlowLog>,
+    cluster: Arc<ClusterState>,
+    migration: Arc<MigrationManager>,
     /// Limit max concurrent connections
     limit_connections: Arc<Semaphore>,
 }
@@ -68,6 +71,19 @@ impl RedisServer {
         let repl_backlog = Arc::new(ReplicationBacklog::new());
         let propagator = Arc::new(CommandPropagator::new(Arc::clone(&repl_backlog)));
 
+        // Initialize cluster if enabled
+        let cluster = Arc::new(ClusterState::new(config.cluster_enabled));
+        let migration = Arc::new(MigrationManager::new());
+
+        // Load cluster configuration if exists and cluster is enabled
+        if config.cluster_enabled && std::path::Path::new(&config.cluster_config_file).exists() {
+            info!("Loading cluster config from {}", config.cluster_config_file);
+            match load_cluster_config(&cluster, &config.cluster_config_file) {
+                Ok(epoch) => info!("Cluster config loaded, epoch: {}", epoch),
+                Err(e) => warn!("Failed to load cluster config: {}", e),
+            }
+        }
+
         Ok(Self {
             db,
             pubsub: Arc::new(PubSub::new()),
@@ -79,6 +95,8 @@ impl RedisServer {
             propagator,
             client_registry: Arc::new(ClientRegistry::new()),
             slowlog: Arc::new(SlowLog::new()),
+            cluster,
+            migration,
             config: Arc::new(config),
             limit_connections: Arc::new(Semaphore::new(max_connections)),
         })
@@ -126,6 +144,8 @@ impl RedisServer {
             let client_registry = self.client_registry.clone();
             let client_registry_for_cleanup = client_registry.clone();
             let slowlog = self.slowlog.clone();
+            let cluster = self.cluster.clone();
+            let migration = self.migration.clone();
 
             // Spawn a new task to handle this connection
             tokio::spawn(async move {
@@ -143,6 +163,8 @@ impl RedisServer {
                     propagator,
                     client_registry,
                     slowlog,
+                    cluster,
+                    migration,
                 ).await {
                     error!("Connection error: {}", e);
                 }
@@ -168,6 +190,8 @@ impl RedisServer {
         propagator: Arc<CommandPropagator>,
         client_registry: Arc<ClientRegistry>,
         slowlog: Arc<SlowLog>,
+        cluster: Arc<ClusterState>,
+        migration: Arc<MigrationManager>,
     ) -> anyhow::Result<()> {
         let mut connection = Connection::new(
             socket,
@@ -183,6 +207,8 @@ impl RedisServer {
             propagator,
             client_registry,
             slowlog,
+            cluster,
+            migration,
         );
         connection.process().await
     }

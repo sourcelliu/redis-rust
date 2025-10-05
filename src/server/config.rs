@@ -27,6 +27,10 @@ pub struct ServerConfig {
     pub rdb_enabled: bool,
     /// RDB file path
     pub rdb_filename: String,
+    /// Enable cluster mode
+    pub cluster_enabled: bool,
+    /// Cluster nodes configuration file
+    pub cluster_config_file: String,
 }
 
 impl Default for ServerConfig {
@@ -43,6 +47,8 @@ impl Default for ServerConfig {
             aof_sync_policy: AofSyncPolicy::EverySecond,
             rdb_enabled: true,
             rdb_filename: "dump.rdb".to_string(),
+            cluster_enabled: false,
+            cluster_config_file: "nodes.conf".to_string(),
         }
     }
 }
@@ -69,5 +75,15 @@ impl ServerConfig {
 
     pub fn addr(&self) -> String {
         format!("{}:{}", self.bind, self.port)
+    }
+
+    pub fn with_cluster_enabled(mut self, enabled: bool) -> Self {
+        self.cluster_enabled = enabled;
+        self
+    }
+
+    pub fn with_cluster_config_file(mut self, file: String) -> Self {
+        self.cluster_config_file = file;
+        self
     }
 }

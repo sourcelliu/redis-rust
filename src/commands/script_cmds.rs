@@ -180,8 +180,8 @@ pub async fn script_flush(script_cache: &Arc<ScriptCache>) -> RespValue {
 
 /// SCRIPT - Main SCRIPT command dispatcher
 pub async fn script(
-    db: &Arc<Database>,
-    db_index: usize,
+    _db: &Arc<Database>,
+    _db_index: usize,
     script_cache: &Arc<ScriptCache>,
     args: Vec<Vec<u8>>,
 ) -> RespValue {

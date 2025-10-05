@@ -478,7 +478,7 @@ pub async fn xrevrange(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) 
     match db_instance.get(&key) {
         Some(RedisValue::Stream(stream)) => {
             // Collect entries in reverse order
-            let mut entries: Vec<_> = stream
+            let entries: Vec<_> = stream
                 .entries
                 .iter()
                 .rev() // Reverse iteration

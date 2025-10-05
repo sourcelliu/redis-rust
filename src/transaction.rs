@@ -135,8 +135,8 @@ pub async fn multi(tx: &mut Transaction) -> RespValue {
 /// EXEC command - Execute all queued commands
 pub async fn exec(
     tx: &mut Transaction,
-    db: &Arc<Database>,
-    db_index: usize,
+    _db: &Arc<Database>,
+    _db_index: usize,
     registry: &Arc<WatchedKeysRegistry>,
     executor: impl Fn(Vec<Vec<u8>>) -> std::pin::Pin<Box<dyn std::future::Future<Output = RespValue> + Send>>,
 ) -> RespValue {
@@ -177,8 +177,8 @@ pub async fn discard(tx: &mut Transaction) -> RespValue {
 /// WATCH command - Watch keys for changes
 pub async fn watch(
     tx: &mut Transaction,
-    db: &Arc<Database>,
-    db_index: usize,
+    _db: &Arc<Database>,
+    _db_index: usize,
     args: Vec<Vec<u8>>,
 ) -> RespValue {
     if args.is_empty() {

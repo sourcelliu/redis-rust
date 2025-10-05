@@ -409,7 +409,7 @@ pub async fn lset(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> Re
     };
 
     match db_instance.get(&key) {
-        Some(RedisValue::List(mut list)) => {
+        Some(RedisValue::List(list)) => {
             let len = list.len() as i64;
             let idx = normalize_index(index, len);
 
@@ -525,7 +525,7 @@ pub async fn lrem(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> Re
     };
 
     match db_instance.get(&key) {
-        Some(RedisValue::List(mut list)) => {
+        Some(RedisValue::List(list)) => {
             let mut removed = 0;
             let mut new_list = LinkedList::new();
 
@@ -1017,7 +1017,7 @@ pub async fn lpos(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> Re
         // Return array of positions
         let results: Vec<RespValue> = positions
             .into_iter()
-            .map(|pos| RespValue::Integer(pos))
+            .map(RespValue::Integer)
             .collect();
         RespValue::Array(Some(results))
     } else if positions.is_empty() {

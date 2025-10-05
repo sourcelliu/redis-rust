@@ -19,5 +19,6 @@ pub mod hyperloglog;
 pub mod geo;
 pub mod stream;
 pub mod key_mgmt;
+pub mod cluster;
 
 pub use dispatcher::CommandDispatcher;

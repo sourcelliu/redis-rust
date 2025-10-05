@@ -128,7 +128,7 @@ pub async fn set(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> Res
                 i += 1;
             }
             _ => {
-                return RespValue::Error(format!("ERR syntax error"));
+                return RespValue::Error("ERR syntax error".to_string());
             }
         }
     }
@@ -298,7 +298,7 @@ pub async fn append(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> 
     };
 
     match db_instance.get(&key) {
-        Some(RedisValue::String(mut current)) => {
+        Some(RedisValue::String(current)) => {
             let mut new_vec = current.to_vec();
             new_vec.extend_from_slice(&append_value);
             let new_bytes = Bytes::from(new_vec);

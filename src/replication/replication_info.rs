@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
-use tokio::net::TcpStream;
+
 
 /// Server role in replication
 #[derive(Debug, Clone, PartialEq, Eq)]

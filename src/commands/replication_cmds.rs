@@ -145,7 +145,7 @@ pub async fn psync(
 
 /// REPLCONF command - Replication configuration
 pub async fn replconf(
-    propagator: &Arc<CommandPropagator>,
+    _propagator: &Arc<CommandPropagator>,
     args: Vec<Vec<u8>>,
 ) -> RespValue {
     if args.is_empty() {

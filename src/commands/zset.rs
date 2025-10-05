@@ -1316,14 +1316,14 @@ pub async fn zscan(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>) -> R
 
 // Helper function for lexicographical matching
 fn lex_match(member: &Bytes, min: &[u8], max: &[u8]) -> bool {
-    let min_inclusive = min.get(0) == Some(&b'[');
-    let max_inclusive = max.get(0) == Some(&b'[');
+    let min_inclusive = min.first() == Some(&b'[');
+    let max_inclusive = max.first() == Some(&b'[');
 
     let min_val = if min == b"-" {
         return true; // -inf
     } else if min == b"+" {
         return false; // +inf
-    } else if min_inclusive || min.get(0) == Some(&b'(') {
+    } else if min_inclusive || min.first() == Some(&b'(') {
         &min[1..]
     } else {
         min
@@ -1333,7 +1333,7 @@ fn lex_match(member: &Bytes, min: &[u8], max: &[u8]) -> bool {
         return true; // +inf
     } else if max == b"-" {
         return false; // -inf
-    } else if max_inclusive || max.get(0) == Some(&b'(') {
+    } else if max_inclusive || max.first() == Some(&b'(') {
         &max[1..]
     } else {
         max
@@ -1741,7 +1741,7 @@ pub async fn zunionstore(db: &Arc<Database>, db_index: usize, args: Vec<Vec<u8>>
             for (member, &score) in &zset.members {
                 result_members
                     .entry(member.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(score * weights[i]);
             }
         }

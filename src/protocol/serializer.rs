@@ -1,6 +1,6 @@
 // RESP Protocol Serializer
 
-use super::{RespValue, Result};
+use super::{RespValue};
 use bytes::{BufMut, BytesMut};
 
 pub struct RespSerializer;

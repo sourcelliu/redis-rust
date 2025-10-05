@@ -1,5 +1,6 @@
 // Connection handler
 
+use crate::cluster::{ClusterState, MigrationManager};
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::config::Config;
 use crate::persistence::aof::AofManager;
@@ -34,10 +35,14 @@ pub struct Connection {
     propagator: Arc<CommandPropagator>,
     client_registry: Arc<ClientRegistry>,
     slowlog: Arc<SlowLog>,
+    cluster: Arc<ClusterState>,
+    migration: Arc<MigrationManager>,
     /// Current selected database (0-15)
     db_index: usize,
     /// Transaction state
     transaction: Transaction,
+    /// ASKING flag for cluster redirection
+    asking: bool,
 }
 
 impl Connection {
@@ -55,6 +60,8 @@ impl Connection {
         propagator: Arc<CommandPropagator>,
         client_registry: Arc<ClientRegistry>,
         slowlog: Arc<SlowLog>,
+        cluster: Arc<ClusterState>,
+        migration: Arc<MigrationManager>,
     ) -> Self {
         Self {
             stream: BufWriter::new(socket),
@@ -71,8 +78,11 @@ impl Connection {
             propagator,
             client_registry,
             slowlog,
+            cluster,
+            migration,
             db_index: 0,
             transaction: Transaction::new(),
+            asking: false,
         }
     }
 
@@ -162,6 +172,31 @@ impl Connection {
             .unwrap_or("unknown")
             .to_uppercase();
         self.client_registry.mark_activity(self.client_id, cmd_name.clone(), self.db_index);
+
+        // Handle ASKING command (sets asking flag for next command)
+        if cmd_name == "ASKING" {
+            self.asking = true;
+            return RespValue::SimpleString("OK".to_string());
+        }
+
+        // Handle CLUSTER commands directly (need access to cluster state)
+        if cmd_name == "CLUSTER" {
+            return self.handle_cluster_command(&cmd_args[1..]);
+        }
+
+        // Check cluster redirection before executing command (skip for CLUSTER commands)
+        if self.cluster.enabled && !cmd_name.starts_with("COMMAND") {
+            // Extract key from command for slot calculation
+            if let Some(redirection_error) = self.check_cluster_redirection(&cmd_name, &cmd_args) {
+                // Reset ASKING flag after using it
+                self.asking = false;
+                return redirection_error;
+            }
+        }
+
+        // Reset ASKING flag after command (whether redirected or not)
+        let asking_was_set = self.asking;
+        self.asking = false;
 
         // Convert command args to strings for slow log
         let cmd_strings: Vec<String> = cmd_args
@@ -324,7 +359,187 @@ impl Connection {
         self.db_index = index;
         Ok(())
     }
+
+    /// Check if command needs cluster redirection
+    /// Returns Some(error) if redirection is needed, None if command can execute locally
+    fn check_cluster_redirection(&self, cmd_name: &str, cmd_args: &[Vec<u8>]) -> Option<RespValue> {
+        use crate::cluster::{key_hash_slot, check_slot_ownership};
+
+        // Skip commands that don't access keys
+        let keyless_commands = [
+            "PING", "ECHO", "SELECT", "FLUSHDB", "FLUSHALL", "DBSIZE",
+            "INFO", "TIME", "LASTSAVE", "SAVE", "BGSAVE",
+            "SHUTDOWN", "CLIENT", "CONFIG", "SLOWLOG", "ROLE",
+            "MULTI", "EXEC", "DISCARD", "WATCH", "UNWATCH"
+        ];
+
+        if keyless_commands.contains(&cmd_name) {
+            return None;
+        }
+
+        // Extract first key based on command
+        let key_index = match cmd_name {
+            // Commands where key is at position 1
+            "GET" | "SET" | "DEL" | "EXISTS" | "EXPIRE" | "TTL" | "TYPE" |
+            "APPEND" | "STRLEN" | "INCR" | "DECR" | "LPUSH" | "RPUSH" |
+            "LPOP" | "RPOP" | "LLEN" | "HSET" | "HGET" | "HDEL" | "HLEN" |
+            "SADD" | "SREM" | "SMEMBERS" | "SCARD" | "ZADD" | "ZREM" |
+            "ZCARD" | "ZSCORE" | "GETEX" | "GETDEL" | "SETEX" | "SETNX" |
+            "INCRBY" | "DECRBY" | "INCRBYFLOAT" | "PSETEX" => 0,
+
+            // Multi-key commands (we'll check if they're in same slot)
+            "MGET" | "MSET" | "MSETNX" => {
+                // For multi-key commands, use check_multi_key_slot
+                if cmd_args.len() > 1 {
+                    use crate::cluster::check_multi_key_slot;
+                    let keys: Vec<&[u8]> = cmd_args.iter().skip(1).step_by(if cmd_name == "MGET" { 1 } else { 2 }).map(|k| k.as_slice()).collect();
+
+                    match check_multi_key_slot(&keys) {
+                        Ok(slot) => {
+                            // All keys in same slot, check if we own it
+                            return check_slot_ownership(&self.cluster, &cmd_args[1], self.asking);
+                        }
+                        Err(msg) => {
+                            // Keys in different slots - CROSSSLOT error
+                            return Some(RespValue::Error(msg));
+                        }
+                    }
+                }
+                return None;
+            }
+
+            // Commands we don't handle yet
+            _ => return None,
+        };
+
+        // Get the key
+        if cmd_args.len() <= key_index + 1 {
+            return None; // Not enough arguments
+        }
+
+        let key = &cmd_args[key_index + 1];
+
+        // Check slot ownership and return redirection if needed
+        check_slot_ownership(&self.cluster, key, self.asking)
+    }
+
+    /// Handle CLUSTER commands with access to cluster state
+    fn handle_cluster_command(&self, args: &[Vec<u8>]) -> RespValue {
+        use crate::commands::cluster::*;
+        use crate::cluster::migration::*;
+
+        if args.is_empty() {
+            return RespValue::Error("ERR wrong number of arguments for 'cluster' command".to_string());
+        }
+
+        let subcommand = match std::str::from_utf8(&args[0]) {
+            Ok(s) => s.to_uppercase(),
+            Err(_) => return RespValue::Error("ERR invalid subcommand".to_string()),
+        };
+
+        match subcommand.as_str() {
+            "KEYSLOT" => {
+                if args.len() != 2 {
+                    return RespValue::Error("ERR wrong number of arguments for 'cluster keyslot'".to_string());
+                }
+                cluster_keyslot(&args[1])
+            }
+            "INFO" => cluster_info(&self.cluster),
+            "MYID" => cluster_myid(&self.cluster),
+            "NODES" => cluster_nodes(&self.cluster),
+            "SLOTS" => cluster_slots(&self.cluster),
+            "ADDSLOTS" => {
+                // Parse slot numbers
+                let mut slots = Vec::new();
+                for arg in &args[1..] {
+                    match std::str::from_utf8(arg).ok().and_then(|s| s.parse::<u16>().ok()) {
+                        Some(slot) if slot < 16384 => slots.push(slot),
+                        _ => return RespValue::Error("ERR Invalid slot number".to_string()),
+                    }
+                }
+                cluster_addslots(&self.cluster, slots)
+            }
+            "DELSLOTS" => {
+                // Parse slot numbers
+                let mut slots = Vec::new();
+                for arg in &args[1..] {
+                    match std::str::from_utf8(arg).ok().and_then(|s| s.parse::<u16>().ok()) {
+                        Some(slot) if slot < 16384 => slots.push(slot),
+                        _ => return RespValue::Error("ERR Invalid slot number".to_string()),
+                    }
+                }
+                cluster_delslots(&self.cluster, slots)
+            }
+            "SETSLOT" => {
+                if args.len() < 3 {
+                    return RespValue::Error("ERR wrong number of arguments for 'cluster setslot'".to_string());
+                }
+
+                let slot = match std::str::from_utf8(&args[1]).ok().and_then(|s| s.parse::<u16>().ok()) {
+                    Some(s) if s < 16384 => s,
+                    _ => return RespValue::Error("ERR Invalid slot number".to_string()),
+                };
+
+                let action = match std::str::from_utf8(&args[2]) {
+                    Ok(s) => s.to_uppercase(),
+                    Err(_) => return RespValue::Error("ERR invalid action".to_string()),
+                };
+
+                match action.as_str() {
+                    "IMPORTING" => {
+                        if args.len() != 4 {
+                            return RespValue::Error("ERR wrong number of arguments".to_string());
+                        }
+                        let node_id = String::from_utf8_lossy(&args[3]).to_string();
+                        cluster_setslot_importing(&self.cluster, &self.migration, slot, node_id)
+                    }
+                    "MIGRATING" => {
+                        if args.len() != 4 {
+                            return RespValue::Error("ERR wrong number of arguments".to_string());
+                        }
+                        let node_id = String::from_utf8_lossy(&args[3]).to_string();
+                        cluster_setslot_migrating(&self.cluster, &self.migration, slot, node_id)
+                    }
+                    "STABLE" => cluster_setslot_stable(&self.cluster, &self.migration, slot),
+                    "NODE" => {
+                        if args.len() != 4 {
+                            return RespValue::Error("ERR wrong number of arguments".to_string());
+                        }
+                        let node_id = String::from_utf8_lossy(&args[3]).to_string();
+                        cluster_setslot_node(&self.cluster, &self.migration, slot, node_id)
+                    }
+                    _ => RespValue::Error(format!("ERR Unknown SETSLOT action '{}'", action)),
+                }
+            }
+            "GETKEYSINSLOT" => {
+                if args.len() != 3 {
+                    return RespValue::Error("ERR wrong number of arguments".to_string());
+                }
+                let slot = match std::str::from_utf8(&args[1]).ok().and_then(|s| s.parse::<u16>().ok()) {
+                    Some(s) if s < 16384 => s,
+                    _ => return RespValue::Error("ERR Invalid slot number".to_string()),
+                };
+                let count = match std::str::from_utf8(&args[2]).ok().and_then(|s| s.parse::<i64>().ok()) {
+                    Some(c) => c,
+                    _ => return RespValue::Error("ERR Invalid count".to_string()),
+                };
+                crate::commands::cluster::cluster_getkeysinslot(&self.cluster, slot, count)
+            }
+            "COUNTKEYSINSLOT" => {
+                if args.len() != 2 {
+                    return RespValue::Error("ERR wrong number of arguments".to_string());
+                }
+                let slot = match std::str::from_utf8(&args[1]).ok().and_then(|s| s.parse::<u16>().ok()) {
+                    Some(s) if s < 16384 => s,
+                    _ => return RespValue::Error("ERR Invalid slot number".to_string()),
+                };
+                crate::commands::cluster::cluster_countkeysinslot(&self.cluster, slot)
+            }
+            _ => RespValue::Error(format!("ERR Unknown CLUSTER subcommand '{}'", subcommand)),
+        }
+    }
 }
+
 
 #[cfg(test)]
 mod tests {

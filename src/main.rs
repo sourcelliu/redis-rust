@@ -14,11 +14,14 @@ async fn main() -> anyhow::Result<()> {
     info!("Redis-Rust server starting...");
 
     // Create server configuration
-    let config = ServerConfig::default();
+    let config = ServerConfig::default()
+        .with_cluster_enabled(true)
+        .with_cluster_config_file("nodes.conf".to_string());
 
     info!("Server will bind to {}", config.addr());
     info!("AOF enabled: {}", config.aof_enabled);
     info!("RDB enabled: {}", config.rdb_enabled);
+    info!("Cluster enabled: {}", config.cluster_enabled);
 
     // Create and run server
     let server = RedisServer::new(config).await?;

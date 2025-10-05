@@ -266,6 +266,29 @@ impl CommandDispatcher {
             "UNLINK" => super::key_mgmt::unlink(db, *db_index, args).await,
             "OBJECT" => super::key_mgmt::object(db, *db_index, args).await,
 
+            // Cluster commands (Placeholder - requires cluster state integration)
+            "CLUSTER" => {
+                if args.is_empty() {
+                    return RespValue::Error("ERR wrong number of arguments for 'cluster' command".to_string());
+                }
+
+                let subcommand_bytes = args.remove(0);
+                let subcommand = match std::str::from_utf8(&subcommand_bytes) {
+                    Ok(s) => s.to_uppercase(),
+                    Err(_) => return RespValue::Error("ERR invalid subcommand".to_string()),
+                };
+
+                match subcommand.as_str() {
+                    "KEYSLOT" => {
+                        if args.len() != 1 {
+                            return RespValue::Error("ERR wrong number of arguments for 'cluster keyslot'".to_string());
+                        }
+                        super::cluster::cluster_keyslot(&args[0])
+                    }
+                    _ => RespValue::Error(format!("ERR Unknown CLUSTER subcommand '{}'", subcommand)),
+                }
+            }
+
             _ => RespValue::Error(format!("ERR unknown command '{}'", cmd)),
         }
     }
