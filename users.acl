@@ -1,0 +1,79 @@
+{
+  "users": [
+    {
+      "username": "default",
+      "passwords": [],
+      "flags": {
+        "bits": 31
+      },
+      "permissions": [],
+      "key_patterns": [],
+      "channel_patterns": []
+    },
+    {
+      "username": "admin",
+      "passwords": [
+        "5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8"
+      ],
+      "flags": {
+        "bits": 15
+      },
+      "permissions": [],
+      "key_patterns": [],
+      "channel_patterns": []
+    },
+    {
+      "username": "readonly",
+      "passwords": [
+        "8cb2237d0679ca88db6464eac60da96345513964"
+      ],
+      "flags": {
+        "bits": 9
+      },
+      "permissions": [
+        {
+          "AllowCategory": "Read"
+        },
+        {
+          "DenyCategory": "Write"
+        },
+        {
+          "DenyCategory": "Dangerous"
+        }
+      ],
+      "key_patterns": [],
+      "channel_patterns": []
+    },
+    {
+      "username": "restricted",
+      "passwords": [
+        "d033e22ae348aeb5660fc2140aec35850c4da997"
+      ],
+      "flags": {
+        "bits": 1
+      },
+      "permissions": [
+        {
+          "AllowCategory": "Read"
+        },
+        {
+          "AllowCategory": "Write"
+        },
+        {
+          "DenyCategory": "Admin"
+        },
+        {
+          "DenyCategory": "Dangerous"
+        }
+      ],
+      "key_patterns": [
+        "user:*",
+        "session:*",
+        "cache:*"
+      ],
+      "channel_patterns": [
+        "notifications:*"
+      ]
+    }
+  ]
+}

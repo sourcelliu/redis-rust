@@ -1062,6 +1062,7 @@ dependencies = [
  "rand",
  "redis",
  "serde",
+ "serde_json",
  "sha1",
  "tempfile",
  "thiserror",

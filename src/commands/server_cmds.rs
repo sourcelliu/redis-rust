@@ -184,10 +184,9 @@ pub async fn config_set(config: &Arc<Config>, args: Vec<Vec<u8>>) -> RespValue {
         Err(_) => return RespValue::Error("ERR invalid value".to_string()),
     };
 
-    if config.set(key.clone(), value) {
-        RespValue::SimpleString("OK".to_string())
-    } else {
-        RespValue::Error(format!("ERR Unsupported CONFIG parameter: {}", key))
+    match config.set(key.clone(), value) {
+        Ok(_) => RespValue::SimpleString("OK".to_string()),
+        Err(e) => RespValue::Error(format!("ERR {}", e)),
     }
 }
 

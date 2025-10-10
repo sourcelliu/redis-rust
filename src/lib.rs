@@ -11,6 +11,7 @@ pub mod cluster;
 pub mod replication;
 pub mod scripting;
 pub mod config;
+pub mod acl;
 
 // Re-export commonly used types
 pub use server::{RedisServer, ServerConfig};
@@ -18,4 +19,5 @@ pub use protocol::{RespValue, RespParser, RespSerializer};
 pub use storage::{Database, RedisValue};
 pub use pubsub::PubSub;
 pub use transaction::{Transaction, WatchedKeysRegistry};
-pub use config::Config;
+pub use config::{ConfigManager, StaticConfig, DynamicConfig};
+pub use acl::{Acl, User, Permission, AclManager};
